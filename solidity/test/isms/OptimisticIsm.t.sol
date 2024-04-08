@@ -260,7 +260,7 @@ contract OptimisticIsmTest is Test, OptimisticIsmErrors {
         bytes32 seed,
         uint256 fraudWindow
     ) public {
-        vm.assume(threshold > 0);
+        vm.assume(threshold > 1);
         vm.assume(numDomains > 0);
         (
             address[] memory watchers,
@@ -286,6 +286,11 @@ contract OptimisticIsmTest is Test, OptimisticIsmErrors {
                 ++i;
             }
         }
+
+        vm.prank(watchers[0]);
+        vm.expectRevert(AlreadyMarkedFraudulent.selector);
+        ism.markFraudulent(address(_submodule));
+
         assertFalse(ism.isFraudulentAt(address(_submodule), block.timestamp));
         vm.expectEmit(address(ism));
         emit PreVerified(message.id(), address(_submodule), block.timestamp);
@@ -300,7 +305,7 @@ contract OptimisticIsmTest is Test, OptimisticIsmErrors {
         bytes32 seed,
         uint256 fraudWindow
     ) public {
-        vm.assume(threshold > 0);
+        vm.assume(threshold > 1);
         vm.assume(numDomains > 0);
         (
             address[] memory watchers,
@@ -325,6 +330,11 @@ contract OptimisticIsmTest is Test, OptimisticIsmErrors {
                 ++i;
             }
         }
+
+        vm.prank(watchers[0]);
+        vm.expectRevert(AlreadyFlaggedAsFraud.selector);
+        ism.markFraudulent(address(_submodule));
+
         assertTrue(ism.isFraudulentAt(address(_submodule), block.timestamp));
         assertFalse(ism.preVerify(metadata, MessageUtils.build(domain)));
     }
