@@ -183,12 +183,9 @@ contract StaticOptimisticIsm is AbstractOptimisticIsm, OwnableUpgradeable {
         if (_submoduleMarkedFraudulentBy[_submodule].contains(msg.sender))
             revert AlreadyMarkedFraudulent();
 
-        if (
-            _submoduleMarkedFraudulentBy[_submodule].length() == threshold - 1
-        ) {
+        _submoduleMarkedFraudulentBy[_submodule].add(msg.sender);
+        if (_submoduleMarkedFraudulentBy[_submodule].length() == threshold) {
             _submoduleFlaggedTime[_submodule] = block.timestamp;
-        } else {
-            _submoduleMarkedFraudulentBy[_submodule].add(msg.sender);
         }
     }
 
