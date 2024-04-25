@@ -16,6 +16,11 @@ import {Message} from "../../libs/Message.sol";
 abstract contract AbstractOptimisticIsm is IOptimisticIsm, OptimisticIsmErrors {
     using Message for bytes;
 
+    struct PreVerification {
+        address submodule;
+        uint256 timestamp;
+    }
+
     // ============ Constants ============
 
     // solhint-disable-next-line const-name-snakecase
@@ -38,8 +43,7 @@ abstract contract AbstractOptimisticIsm is IOptimisticIsm, OptimisticIsmErrors {
     /// @dev If a message is pre-verified successfully, the verification
     /// information, the ISM performing the pre-verifition and the timestamp,
     /// are stored into the two below mappings.
-    mapping(bytes32 => address) internal preVerifiedByIsm;
-    mapping(bytes32 => uint256) internal preVerifiedAtTimestamp;
+    mapping(bytes32 => PreVerification) internal preVerificationData;
 
     // ============ Virtual Functions ============
     // ======= OVERRIDE THESE TO IMPLEMENT =======
@@ -76,6 +80,9 @@ abstract contract AbstractOptimisticIsm is IOptimisticIsm, OptimisticIsmErrors {
         bytes calldata _message
     ) public override returns (bool verified) {
         bytes32 messageId = _message.id();
+        PreVerification storage preVerification = preVerificationData[
+            messageId
+        ];
 
         /// @dev If the message has already been pre-verified, revert.
         /// Here, we only allow one pre-verification per message to ensure
@@ -88,18 +95,22 @@ abstract contract AbstractOptimisticIsm is IOptimisticIsm, OptimisticIsmErrors {
         /// ISM, but then the recorded fraudulent ISM is overridden by a
         /// later pre-verification by a non-fraudulent ISM (which may be
         /// marked as fraudulent after the fraud window elapses).
-        if (preVerifiedAtTimestamp[messageId] != 0) {
+        if (preVerification.timestamp != 0) {
             revert AlreadyPreVerified();
         }
+
+        /// @dev Set the pre-verification timestamp to the current block timestamp.
+        /// The timestamp marks the first time the message is pre-verified,
+        /// irrespective of the below verification result.
+        preVerification.timestamp = block.timestamp;
 
         IInterchainSecurityModule _submodule = submodule(_message);
         verified =
             !isFraudulentAt(address(_submodule), block.timestamp) &&
             _submodule.verify(_metadata, _message);
 
-        preVerifiedAtTimestamp[messageId] = block.timestamp;
         if (verified) {
-            preVerifiedByIsm[messageId] = address(_submodule);
+            preVerification.submodule = address(_submodule);
             emit PreVerified(messageId, address(_submodule), block.timestamp);
         }
     }
@@ -110,15 +121,17 @@ abstract contract AbstractOptimisticIsm is IOptimisticIsm, OptimisticIsmErrors {
         bytes calldata _message
     ) public view override returns (bool) {
         bytes32 messageId = _message.id();
-        address preVerifiedSubmodule = preVerifiedByIsm[messageId];
+        PreVerification storage preVerification = preVerificationData[
+            messageId
+        ];
+        address preVerifiedSubmodule = preVerification.submodule;
 
         /// @dev If the message has not been pre-verified successfully, return false.
         if (preVerifiedSubmodule == address(0)) {
             return false;
         }
 
-        uint256 elapsedTime = preVerifiedAtTimestamp[messageId] +
-            fraudWindow(_message);
+        uint256 elapsedTime = preVerification.timestamp + fraudWindow(_message);
 
         /// @dev If the ISM submodule has been flagged as fraudulent
         /// before the fraud window has elapsed, return false.
